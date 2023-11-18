@@ -7,12 +7,11 @@
 
 import UIKit
 
+
 final class MoviesTableViewController: UITableViewController {
     // MARK: Properties
-    
     private let searchBar = UISearchBar()
-    private var movies = [Movie]()
-    private var originalMovies = [Movie]()
+    private var moviesViewModel = MoviesViewModel()
     
     private var emptyStateLabel: UILabel = {
         let label = UILabel()
@@ -24,7 +23,6 @@ final class MoviesTableViewController: UITableViewController {
     }()
     
     // MARK: Lifecycle
-    
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.delegate = self
@@ -34,7 +32,6 @@ final class MoviesTableViewController: UITableViewController {
     }
     
     // MARK: Configuration
-    
     private func configureSearchBar() {
         searchBar.delegate = self
         searchBar.placeholder = "Search Movies"
@@ -47,39 +44,33 @@ final class MoviesTableViewController: UITableViewController {
         emptyStateLabel.frame = view.bounds
     }
     
-    // MARK:  Data Loading
-    
+    // MARK: Data Loading
     private func loadOriginalData() {
-        NetworkManager.shared.fetchMovies(from: "movie/popular") { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let movies):
-                    self?.originalMovies = movies
-                    self?.movies = movies
+        Task {
+            do {
+                let movies = try await moviesViewModel.fetchMovies()
+                DispatchQueue.main.async { [weak self] in
+                    self?.moviesViewModel.originalMovies = movies
+                    self?.moviesViewModel.movies = movies
                     self?.tableView.reloadData()
-                case .failure(let error):
-                    self?.presentAlert(with: error.localizedDescription)
+                    self?.updateUIForEmptyState()
                 }
-                self?.updateUIForEmptyState()
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    self?.presentAlert(with: "Failed to load movies.")
+                }
             }
         }
     }
     
-    // MARK:  UITableViewDataSource Methods
-    
-    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        let screenHeight = UIScreen.main.bounds.height
-        let cellHeight = screenHeight / 4.0
-        return cellHeight
-    }
-    
+    // MARK: UITableViewDataSource Methods
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return movies.count
+        return moviesViewModel.movies.count
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: MovieTableViewCell.identifier, for: indexPath) as! MovieTableViewCell
-        let movie = movies[indexPath.row]
+        let movie = moviesViewModel.movies[indexPath.row]
         
         if indexPath.row % 2 == 0 {
             cell.contentView.backgroundColor = UIColor.darkGray
@@ -92,33 +83,37 @@ final class MoviesTableViewController: UITableViewController {
         return cell
     }
     
-    // MARK: UITableViewDelegate Methods
     
+    // MARK: UITableViewDelegate Methods
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        let movie = movies[indexPath.row]
-        let detailVC = MovieDetailViewController()
+        let movie = moviesViewModel.movies[indexPath.row]
         
         Task {
             do {
-                let movieDetails = try await NetworkManager.shared.fetchMovieDetails(for: movie.id)
-                detailVC.movie = movieDetails
-                self.navigationController?.pushViewController(detailVC, animated: true)
+                let movieDetails = try await moviesViewModel.fetchMovieDetails(for: movie.id)
+                
+                DispatchQueue.main.async { [weak self] in
+                    let detailVC = MovieDetailViewController()
+                    detailVC.viewModel = MovieDetailViewModel(movie: movieDetails)
+                    self?.navigationController?.pushViewController(detailVC, animated: true)
+                }
             } catch {
-                self.presentAlert(with: "Failed to load movie details.")
+                DispatchQueue.main.async { [weak self] in
+                    self?.presentAlert(with: "Failed to load movie details.")
+                }
             }
         }
     }
 }
-
+// MARK: - UISearchBarDelegate Methods
 
 extension MoviesTableViewController: UISearchBarDelegate {
-    // MARK: UISearchBarDelegate Methods
-    
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
         if let searchText = searchBar.text, !searchText.isEmpty {
-            movies = originalMovies.filter { $0.title.lowercased().contains(searchText.lowercased()) }
+            moviesViewModel.movies = moviesViewModel.originalMovies.filter { $0.title.lowercased().contains(searchText.lowercased()) }
             tableView.reloadData()
+            updateUIForEmptyState()
         }
     }
     
@@ -130,31 +125,27 @@ extension MoviesTableViewController: UISearchBarDelegate {
     
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
         if searchText.isEmpty {
-            movies = originalMovies
+            moviesViewModel.movies = moviesViewModel.originalMovies
             tableView.reloadData()
+            updateUIForEmptyState()
         } else {
-            movies = originalMovies.filter { $0.title.lowercased().contains(searchText.lowercased()) }
+            moviesViewModel.movies = moviesViewModel.originalMovies.filter { $0.title.lowercased().contains(searchText.lowercased()) }
             tableView.reloadData()
+            updateUIForEmptyState()
         }
     }
 }
 
+// MARK: - Helper Methods
 extension MoviesTableViewController {
-    // MARK: Helper Methods
+    private func updateUIForEmptyState() {
+        emptyStateLabel.isHidden = !moviesViewModel.movies.isEmpty
+    }
     
     private func presentAlert(with message: String) {
         let alert = UIAlertController(title: "Alert", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
         self.present(alert, animated: true, completion: nil)
     }
-    
-    private func updateUIForEmptyState() {
-        if movies.isEmpty {
-            emptyStateLabel.isHidden = false
-            tableView.separatorStyle = .none
-        } else {
-            emptyStateLabel.isHidden = true
-            tableView.separatorStyle = .singleLine
-        }
-    }
 }
+

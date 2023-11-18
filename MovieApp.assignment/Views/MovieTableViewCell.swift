@@ -1,17 +1,19 @@
+//  movie.swift
+//  MovieApp.assignment
+//
+//  Created by Salome Lapiashvili on 11.11.23.
+//
+
 import UIKit
-import Kingfisher
 
-
-
-class MovieTableViewCell: UITableViewCell {
+final class MovieTableViewCell: UITableViewCell {
     static let identifier = "MovieTableViewCell"
-    //MARK: properties
+    
     let posterImageView = UIImageView()
     let titleLabel = UILabel()
     let releaseYearLabel = UILabel()
     let ratingLabel = UILabel()
     
-    //MARK: lifecycle
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         
@@ -23,32 +25,31 @@ class MovieTableViewCell: UITableViewCell {
         fatalError("init(coder:) has not been implemented")
     }
     
-    // MARK: Private methods
     private func setupViews() {
         setupPosterView()
         setupLabels()
-        setupConstraints()
     }
-
+    
     private func setupPosterView() {
-        posterImageView.contentMode = .scaleAspectFit
+        posterImageView.contentMode = .scaleAspectFill
         posterImageView.layer.cornerRadius = 20
         posterImageView.clipsToBounds = true
+        posterImageView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(posterImageView)
     }
-
+    
     private func setupLabels() {
         titleLabel.font = UIFont.boldSystemFont(ofSize: 16)
         releaseYearLabel.font = UIFont.systemFont(ofSize: 14)
         ratingLabel.font = UIFont.systemFont(ofSize: 14)
         titleLabel.numberOfLines = 0
         titleLabel.lineBreakMode = .byWordWrapping
-
+        
         contentView.addSubview(titleLabel)
         contentView.addSubview(releaseYearLabel)
         contentView.addSubview(ratingLabel)
     }
-
+    
     private func setupConstraints() {
         posterImageView.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -58,10 +59,15 @@ class MovieTableViewCell: UITableViewCell {
         let padding: CGFloat = 5
         
         NSLayoutConstraint.activate([
-            posterImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 30),
-            posterImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: padding),
-            posterImageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -padding),
-            posterImageView.widthAnchor.constraint(equalToConstant: 100),
+            posterImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
+            posterImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
+            posterImageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
+            posterImageView.heightAnchor.constraint(equalToConstant: 140),
+            posterImageView.widthAnchor.constraint(equalToConstant: 100)
+        ])
+        
+        NSLayoutConstraint.activate([
+            contentView.heightAnchor.constraint(equalTo: heightAnchor, multiplier: 1/5)
         ])
         
         NSLayoutConstraint.activate([
@@ -93,14 +99,7 @@ class MovieTableViewCell: UITableViewCell {
         ratingLabel.text = "Rating: \(movie.rating)"
         
         if let posterURL = movie.posterURL {
-            posterImageView.kf.setImage(
-                with: posterURL,
-                placeholder: UIImage(named: "placeholder"),
-                options: [
-                    .scaleFactor(UIScreen.main.scale),
-                    .transition(.fade(1)),
-                    .cacheOriginalImage
-                ])
+            downloadImage(from: posterURL)
         } else {
             posterImageView.image = UIImage(named: "placeholder")
         }
@@ -110,4 +109,19 @@ class MovieTableViewCell: UITableViewCell {
         releaseYearLabel.textColor = isEvenRow ? UIColor.white : UIColor.black
         ratingLabel.textColor = isEvenRow ? UIColor.white : UIColor.black
     }
+    
+    func downloadImage(from url: URL) {
+        URLSession.shared.dataTask(with: url) { data, _, error in
+            if let data = data, let image = UIImage(data: data) {
+                DispatchQueue.main.async {
+                    self.posterImageView.image = image
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.posterImageView.image = UIImage(named: "placeholder")
+                }
+            }
+        }.resume()
+    }
 }
+
